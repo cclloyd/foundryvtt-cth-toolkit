@@ -1,3 +1,23 @@
 .cth-app {
-
+    .form-group {
+        display: flex;
+        gap: 0.5rem;
+        margin: 0.25rem 0;
+        align-items: center;
+        label {
+            text-align: left;
+            color: red !important;
+            font-weight: bold;
+            white-space: nowrap;
+            flex: 0 0 30%;
+        }
+        .form-fields {
+            flex: 1 1 auto;
+            display: flex;
+            flex-wrap: nowrap;
+            justify-content: flex-end;
+            align-items: center;
+        }
+    }
 }
+

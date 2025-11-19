@@ -1,13 +1,46 @@
-<div style="text-align: center;">
-
-    <h4>A GM has started a ready check.</h4>
-
-    <div style="display: flex; gap: 1rem; justify-content: center; width: 100%;">
-        <button type="submit" style="flex: 1 1 0; height: 40px;"><i class="fas fa-check"></i> Ready</button>
-        <button style="flex: 1 1 0; height: 40px;" data-action="notReady"><i class="fas fa-xmark"></i> Not Ready</button>
+<div class="form-fields">
+    <div class="form-group">
+        <label for="name">Name</label>
+        <input type="text" name="name" id="name" value="New Token"/>
     </div>
 
-    <hr style="width: 100%; height: 1px;">
+    <div class="form-group">
+        <label for="img">Image Path</label>
+        <div class="form-fields">
+            <file-picker name="img" id="img" type="image" value="icons/svg/mystery-man.svg"></file-picker>
+        </div>
+    </div>
 
-    <i style="font-size: 11px">You can also toggle your ready status anytime <br/> by clicking on your status in the bottom left.</i>
+    <div class="form-group">
+        <label for="disposition">Disposition</label>
+        <select name="disposition" id="disposition">
+            <option value="1" selected>Friendly</option>
+            <option value="0">Neutral</option>
+            <option value="-1">Hostile</option>
+            <option value="-2">Secret</option>
+        </select>
+    </div>
+
+    <div class="form-group">
+        <label for="size">Size</label>
+        <select name="size" id="size">
+            <option value="1">Fine</option>
+            <option value="2">Diminutive</option>
+            <option value="2">Tiny</option>
+            <option value="3">Small</option>
+            <option value="4" selected>Medium</option>
+            <option value="6">Large</option>
+            <option value="8">Huge</option>
+            <option value="12">Gargantuan</option>
+            <option value="16">Colossal</option>
+        </select>
+    </div>
+
+    <div class="form-group">
+        <label for="lantern">Equip Lantern?</label>
+        <div class="form-fields">
+            <input type="checkbox" name="lantern" id="lantern"/>
+            <p class="notes">Adds 30ft bright-light source.</p>
+        </div>
+    </div>
 </div>

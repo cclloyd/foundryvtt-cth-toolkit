@@ -1,5 +1,5 @@
 // src/module/types/cth-toolkit.d.ts
-import type { CTHManager } from '#cth/module/lib/manager';
+import type { CTHManager } from '#cth/module/lib/manager/manager';
 
 declare global {
     var game: Game & {

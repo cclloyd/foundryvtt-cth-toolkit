@@ -95,4 +95,4 @@ export class Logger {
     }
 }
 
-export const modLogger = new Logger({ prefix: 'cth-toolkit | ', level: 'log', enabled: true });
+export const modLogger = new Logger({ prefix: `${ns} |`, level: 'log', enabled: true });
