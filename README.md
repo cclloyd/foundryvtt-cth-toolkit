@@ -5,7 +5,7 @@ others may use it. Most functions of this module are able to be enabled/disabled
 
 # Features:
 
-- TODO
+- All apps and API exposed through `game.cth`.
 
 # Installation
 
