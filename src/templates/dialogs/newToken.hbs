@@ -1,4 +1,8 @@
 <div class="form">
+    <div class="avatar">
+        <img src="{{formData.img}}" alt="Token Image" class="token-image" height="60"/>
+    </div>
+
     <div class="form-group">
         <label for="name">Name</label>
         <div class="form-fields">
@@ -9,7 +13,7 @@
     <div class="form-group">
         <label for="img">Image Path</label>
         <div class="form-fields">
-            <file-picker name="img" id="img" type="image" value="icons/svg/mystery-man.svg"></file-picker>
+            <file-picker name="img" id="img" type="image" value="{{#if formData.img}}{{formData.img}}{{else}}/icons/svg/mystery-man.svg{{/if}}"></file-picker>
         </div>
     </div>
 
@@ -17,10 +21,10 @@
         <label for="disposition">Disposition</label>
         <div class="form-fields">
             <select name="disposition" id="disposition">
-                <option value="1" selected>Friendly</option>
-                <option value="0">Neutral</option>
-                <option value="-1">Hostile</option>
-                <option value="-2">Secret</option>
+                <option value="1" {{#if (eq formData.disposition "1")}}selected{{/if}}>Friendly</option>
+                <option value="0" {{#if (eq formData.disposition "0")}}selected{{/if}}>Neutral</option>
+                <option value="-1" {{#if (eq formData.disposition "-1")}}selected{{/if}}>Hostile</option>
+                <option value="-2" {{#if (eq formData.disposition "-2")}}selected{{/if}}>Secret</option>
             </select>
         </div>
     </div>
@@ -28,26 +32,31 @@
     <div class="form-group">
         <label for="size">Size</label>
         <div class="form-fields">
-            <select name="size" id="size">
-                <option value="1">Fine</option>
-                <option value="2">Diminutive</option>
-                <option value="2">Tiny</option>
-                <option value="3">Small</option>
-                <option value="4" selected>Medium</option>
-                <option value="5">Large</option>
-                <option value="6">Huge</option>
-                <option value="7">Gargantuan</option>
-                <option value="8">Colossal</option>
-            </select>
+            <div class="size-buttons">
+                <button data-size="4" class="size-button" data-action="setSize"><span data-size="4">M</span></button>
+                <div>
+                    <button data-size="3" class="size-button" data-action="setSize"><span data-size="3">S</span></button>
+                    <button data-size="2" class="size-button" data-action="setSize"><span data-size="2">T</span></button>
+                    <button data-size="1" class="size-button" data-action="setSize"><span data-size="1">D</span></button>
+                    <button data-size="0" class="size-button" data-action="setSize"><span data-size="0">F</span></button>
+                </div>
+                <div>
+                    <button data-size="5" class="size-button" data-action="setSize"><span data-size="5">L</span></button>
+                    <button data-size="6" class="size-button" data-action="setSize"><span data-size="6">H</span></button>
+                    <button data-size="7" class="size-button" data-action="setSize"><span data-size="7">G</span></button>
+                    <button data-size="8" class="size-button" data-action="setSize"><span data-size="8">C</span></button>
+                </div>
+            </div>
+            <input type="hidden" name="size" id="size" value="{{formData.size}}"/>
         </div>
     </div>
 
     <div class="form-group">
         <label for="lantern">Equip Lantern?</label>
         <div class="form-fields">
-            <input type="checkbox" name="lantern" id="lantern"/>
+            <input type="checkbox" name="lantern" id="lantern" {{#if formData.lantern }}checked{{/if}}>
         </div>
-        <div class="notes">Adds 30ft bright-light source.</div>
+        <div class="notes">Adds 20-ft bright-light source.</div>
     </div>
 
     <button type="submit" id="save"><i class="fas fa-user-plus"></i>Create Token</button>

@@ -1,5 +1,5 @@
 import { baseClass, ns } from '#cth/module/lib/config';
-import { getGridSize, getIconSize, localize, useNamespace } from '#cth/module/lib/util';
+import { getGridSize, getIconSize, localize, sleep, useNamespace } from '#cth/module/lib/util';
 
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
 type RenderOptions = foundry.applications.api.ApplicationV2.RenderOptions;
@@ -34,7 +34,9 @@ export class ApplicationNewToken extends HandlebarsApplicationMixin(ApplicationV
             resizable: false,
             minimizable: true,
         },
-        actions: {},
+        actions: {
+            setSize: this.prototype.setSize,
+        },
     } as DefaultOptions;
 
     get title() {
@@ -80,8 +82,8 @@ export class ApplicationNewToken extends HandlebarsApplicationMixin(ApplicationV
             // Add Light Data if requested
             if (formData.lantern) {
                 tokenData.light = {
-                    dim: 60,
-                    bright: 30,
+                    dim: 40,
+                    bright: 20,
                     angle: 360,
                     color: '#000000',
                     alpha: 0.0,
@@ -94,5 +96,61 @@ export class ApplicationNewToken extends HandlebarsApplicationMixin(ApplicationV
 
             game.user!.setFlag(ns, 'dialog.newToken', formData);
         });
+    }
+
+    setSize(event: JQuery.ClickEvent<HTMLElement, undefined, HTMLElement, HTMLElement>) {
+        event.preventDefault();
+        const $app = this.getRootHtml();
+        const size = event.target.dataset.size!;
+        $app.find(`[name="size"]`).val(size);
+        $app.find(`.size-button.active`).removeClass('active');
+        $app.find(`.size-button[data-size="${size}"]`).addClass('active');
+    }
+
+    getRootHtml() {
+        return $(`#${(this.constructor as typeof ApplicationNewToken).DEFAULT_OPTIONS.id}`);
+    }
+
+    getBorderColor(disposition: any, opacity = 0.5) {
+        switch (Number(disposition)) {
+            case 1:
+                return `rgba(0, 255, 0, ${opacity})`;
+            case 0:
+                return `rgba(255, 255, 255, ${opacity})`;
+            case -1:
+                return `rgba(255, 0, 0, ${opacity})`;
+            case -2:
+                return `rgba(255, 255, 0, ${opacity})`;
+            default:
+                return 'none';
+        }
+    }
+
+    async _onRender(context: any, options: RenderOptions) {
+        // Need to use _onRender instead of actions for non-click listeners
+        await super._onRender(context, options);
+        const $app = this.getRootHtml();
+
+        const $disposition = $app.find('[name="disposition"]');
+        const $img = $app.find('[name="img"]');
+        const $preview = $app.find('.avatar img');
+
+        // Handle image preview change
+        $app.find('[name="img"]').on('change', (event: JQuery.ChangeEvent<HTMLInputElement>) => {
+            $preview.attr('src', event.target.value);
+            $preview.css(
+                'filter',
+                `drop-shadow(0 0 5px ${this.getBorderColor($disposition.val(), event.target.value === 'icons/svg/mystery-man.svg' ? 1 : 0.5)})`,
+            );
+        });
+
+        // Handle disposition change
+        $disposition.on('change', (event: JQuery.ChangeEvent<HTMLInputElement>) => {
+            $preview.css('filter', `drop-shadow(0 0 5px ${this.getBorderColor(event.target.value, $img.val() === 'icons/svg/mystery-man.svg' ? 1 : 0.5)})`);
+        });
+
+        // Run certain events once on initial render
+        $app.find(`.size-button[data-size="${$app.find(`[name="size"]`).val()}"]`).addClass('active');
+        $preview.css('filter', `drop-shadow(0 0 5px ${this.getBorderColor($disposition.val(), $img.val() === 'icons/svg/mystery-man.svg' ? 1 : 0.5)})`);
     }
 }
