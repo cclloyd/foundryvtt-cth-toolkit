@@ -58,6 +58,8 @@ export class ApplicationNewToken extends HandlebarsApplicationMixin(ApplicationV
 
         ui.notifications!.info('Click on the canvas to place the token.');
 
+        // Start having img follow mouse cursor here until placed
+
         canvas!.stage!.once('mousedown', async (event: any) => {
             const { x, y } = event.data.getLocalPosition(canvas!.stage);
             const snapped = canvas!.grid!.getSnappedPoint({ x, y }, { mode: CONST.GRID_SNAPPING_MODES.CENTER });

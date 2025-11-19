@@ -100,6 +100,10 @@
     }
 }
 #cth-newToken {
+    .buttons {
+        display: flex;
+        justify-content: center;
+    }
     .avatar {
         width: 100%;
         display: flex;
