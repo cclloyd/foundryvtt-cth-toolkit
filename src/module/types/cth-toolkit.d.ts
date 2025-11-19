@@ -2,26 +2,9 @@
 import type { CTHManager } from '#cth/module/lib/manager';
 
 declare global {
-    // Extend each game phase in fvtt-types
-    interface UninitializedGame {
-        readyCheck: CTHManager;
-    }
-
-    interface InitGame {
-        readyCheck: CTHManager;
-    }
-
-    interface I18nInitGame {
-        readyCheck: CTHManager;
-    }
-
-    interface SetupGame {
-        readyCheck: CTHManager;
-    }
-
-    interface ReadyGame {
-        readyCheck: CTHManager;
-    }
+    var game: Game & {
+        cth: CTHManager,
+    };
 
     namespace ClientSettings {
         interface Values {

@@ -29,7 +29,7 @@
         // Relative imports
         "baseUrl": ".",
         "paths": {
-            "#ccrc/*": ["src/*"]
+            "#cth/*": ["src/*"]
         },
 
         "plugins": [{ "transform": "typescript-transform-paths" }, { "transform": "typescript-transform-paths", "afterDeclarations": true }]

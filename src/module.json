@@ -24,7 +24,7 @@
         }
     ],
     "socket": true,
-    "url": "https://gitlab.com/cclloyd1/cth-toolkit",
+    "url": "https://github.com/cclloyd/foundryvtt-cth-toolkit",
     "manifest": "https://github.com/cclloyd/foundryvtt-cth-toolkit/releases/latest/download/module.json",
     "download": "https://github.com/cclloyd/foundryvtt-cth-toolkit/releases/download/CI_COMMIT_TAG/cth-toolkit.zip",
     "license": "MIT",
