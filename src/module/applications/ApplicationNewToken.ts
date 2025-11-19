@@ -69,10 +69,10 @@ export class ApplicationNewToken extends HandlebarsApplicationMixin(ApplicationV
         preview.position.set(-10000, -10000);
         // Use a top-level overlay layer so it renders above the scene
         canvas!.interface!.addChild(preview);
-
+        const snapMode = gridSize % 2 ? CONST.GRID_SNAPPING_MODES.CENTER : CONST.GRID_SNAPPING_MODES.CORNER;
         const moveHandler = (e: any) => {
             const { x, y } = e.data.getLocalPosition(canvas!.stage);
-            const snapped = canvas!.grid!.getSnappedPoint({ x, y }, { mode: CONST.GRID_SNAPPING_MODES.CENTER });
+            const snapped = canvas!.grid!.getSnappedPoint({ x, y }, { mode: snapMode });
             preview.position.set(snapped.x, snapped.y);
         };
 
@@ -86,7 +86,7 @@ export class ApplicationNewToken extends HandlebarsApplicationMixin(ApplicationV
         canvas!.stage!.once('rightdown', () => cleanup());
         canvas!.stage!.once('mousedown', async (event: any) => {
             const { x, y } = event.data.getLocalPosition(canvas!.stage);
-            const snapped = canvas!.grid!.getSnappedPoint({ x, y }, { mode: CONST.GRID_SNAPPING_MODES.CENTER });
+            const snapped = canvas!.grid!.getSnappedPoint({ x, y }, { mode: snapMode });
             const sizePxLocal = gridSize * canvas!.grid!.size;
 
             const tokenData: any = {
