@@ -12,6 +12,7 @@ import { rimraf } from 'rimraf';
 // Add at top with other imports
 // Add this import
 import fsExtra from 'fs-extra';
+import dayjs from 'dayjs';
 
 const sass = gulpSass(dartSass);
 
@@ -24,7 +25,13 @@ const GLOBS = {
     styles: `${SRC_DIR}/**/*.scss`,
     scripts: [`${SRC_DIR}/**/*.ts`, `${SRC_DIR}/**/*.tsx`, `!${SRC_DIR}/**/*.d.ts`],
     // Exclude packs from gulp's stream copying; we will copy them via fs-extra
-    assets: [`${SRC_DIR}/**/*`, `!${SRC_DIR}/**/*.ts`, `!${SRC_DIR}/**/*.tsx`, `!${SRC_DIR}/**/*.scss`],
+    assets: [
+        `${SRC_DIR}/**/*`,
+        `!${SRC_DIR}/**/*.ts`,
+        `!${SRC_DIR}/**/*.tsx`,
+        `!${SRC_DIR}/**/*.scss`,
+        `!${SRC_DIR}/module.json`,
+    ],
 };
 
 // Utilities for timing and logging
@@ -54,6 +61,24 @@ const finishLogger = (kind) =>
 // ---- Clean dist/ ----
 export function clean(cb) {
     rimraf(DIST_DIR).then(() => cb(), cb);
+}
+
+// ---- Manifest (module.json) ----
+export function manifest() {
+    const version = `dev-${dayjs().format('YYYYMMDD-HHmmss')}`;
+    return gulp
+        .src(`${SRC_DIR}/module.json`, { base: SRC_DIR })
+        .pipe(
+            through2.obj((file, enc, cb) => {
+                if (file.isBuffer()) {
+                    const content = file.contents.toString(enc).replace('CI_COMMIT_TAG', version);
+                    file.contents = Buffer.from(content, enc);
+                }
+                cb(null, file);
+            }),
+        )
+        .pipe(gulp.dest(DIST_DIR))
+        .pipe(finishLogger('manifest'));
 }
 
 // ---- SCSS Compilation ----
@@ -203,22 +228,23 @@ export async function copyPacksFs() {
 // Define missing watcher callbacks
 function scriptsChanged() {
     // Fire-and-forget; errors are already handled by plumber in scripts()
-    void scripts();
+    scripts().then(manifest);
 }
 function assetsChanged(_p) {
     // Copy changed assets (simple approach: recopy matching glob set)
-    void assets();
+    // Run manifest after assets are copied
+    gulp.series(assets, manifest)(() => {});
 }
 
 // Compose build
-export const build = gulp.parallel(styles, scripts, gulp.series(assets));
+export const build = gulp.parallel(styles, scripts, assets, manifest);
 
 // One-shot build (clean + build) for CI/production
 export const prod = gulp.series(clean, build);
 
 // Dev: clean, build once, then watch
 export function watchAll() {
-    gulp.watch(GLOBS.styles, styles);
+    gulp.watch(GLOBS.styles, gulp.series(styles, manifest));
     gulp.watch(GLOBS.scripts)
         .on('change', () => scriptsChanged())
         .on('add', () => scriptsChanged());
@@ -226,6 +252,8 @@ export function watchAll() {
         .on('change', (p) => assetsChanged(p))
         .on('add', (p) => assetsChanged(p));
     // On any change inside packs, re-copy via fs-extra
-    gulp.watch(`${SRC_DIR}/packs/**/*`, copyPacksFs);
+    gulp.watch(`${SRC_DIR}/packs/**/*`, gulp.series(copyPacksFs, manifest));
+    // Watch module.json specifically
+    gulp.watch(`${SRC_DIR}/module.json`, manifest);
 }
 export const dev = gulp.series(clean, build, watchAll);

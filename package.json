@@ -21,7 +21,8 @@
     "scripts": {
         "build": "gulp build",
         "dev": "gulp dev",
-        "clean": "rimraf dist"
+        "clean": "rimraf dist",
+        "link-win": "New-Item -ItemType Junction -Path \"$env:LOCALAPPDATA\\FoundryVTT\\Data\\modules\\cth-toolkit\" -Target \".\\dist\""
     },
     "devDependencies": {
         "@esbuild-plugins/tsconfig-paths": "^0.1.2",

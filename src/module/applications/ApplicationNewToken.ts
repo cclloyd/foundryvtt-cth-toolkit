@@ -1,5 +1,5 @@
 import { baseClass, ns } from '#cth/module/lib/config';
-import { localize, useNamespace } from '#cth/module/lib/util';
+import { getGridSize, getIconSize, localize, useNamespace } from '#cth/module/lib/util';
 
 const { ApplicationV2, HandlebarsApplicationMixin, DialogV2 } = foundry.applications.api;
 type RenderOptions = foundry.applications.api.ApplicationV2.RenderOptions;
@@ -50,5 +50,40 @@ export class ApplicationNewToken extends HandlebarsApplicationMixin(ApplicationV
     static async #onSubmit(event: Event, form: any, rawFormData: FormDataExtended) {
         event.preventDefault();
         const formData = rawFormData.object as Record<string, string>;
+        const center = canvas!.stage!.pivot;
+        const gridSize = getGridSize(formData.size);
+        const iconSize = getIconSize(formData.size);
+
+        // Basic Token Data
+        const tokenData: any = {
+            name: formData.name,
+            texture: {
+                src: formData.img,
+                scaleX: iconSize,
+                scaleY: iconSize,
+            },
+            disposition: formData.disposition,
+            displayName: CONST.TOKEN_DISPLAY_MODES.HOVER,
+            width: gridSize,
+            height: gridSize,
+            x: center.x,
+            y: center.y,
+            actorLink: false,
+        };
+
+        // Add Light Data if requested
+        if (formData.lantern) {
+            tokenData.light = {
+                dim: 60,
+                bright: 30,
+                angle: 360,
+                color: '#000000',
+                alpha: 0.0,
+            };
+        }
+
+        // Create the Token
+        await canvas!.scene!.createEmbeddedDocuments('Token', [tokenData]);
+        ui.notifications!.info(`Created token: ${formData.name}`);
     }
 }

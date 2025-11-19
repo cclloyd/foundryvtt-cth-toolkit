@@ -1,7 +1,9 @@
-<div class="form-fields">
+<div class="form">
     <div class="form-group">
         <label for="name">Name</label>
-        <input type="text" name="name" id="name" value="New Token"/>
+        <div class="form-fields">
+            <input type="text" name="name" id="name" value="New Token"/>
+        </div>
     </div>
 
     <div class="form-group">
@@ -13,34 +15,40 @@
 
     <div class="form-group">
         <label for="disposition">Disposition</label>
-        <select name="disposition" id="disposition">
-            <option value="1" selected>Friendly</option>
-            <option value="0">Neutral</option>
-            <option value="-1">Hostile</option>
-            <option value="-2">Secret</option>
-        </select>
+        <div class="form-fields">
+            <select name="disposition" id="disposition">
+                <option value="1" selected>Friendly</option>
+                <option value="0">Neutral</option>
+                <option value="-1">Hostile</option>
+                <option value="-2">Secret</option>
+            </select>
+        </div>
     </div>
 
     <div class="form-group">
         <label for="size">Size</label>
-        <select name="size" id="size">
-            <option value="1">Fine</option>
-            <option value="2">Diminutive</option>
-            <option value="2">Tiny</option>
-            <option value="3">Small</option>
-            <option value="4" selected>Medium</option>
-            <option value="6">Large</option>
-            <option value="8">Huge</option>
-            <option value="12">Gargantuan</option>
-            <option value="16">Colossal</option>
-        </select>
+        <div class="form-fields">
+            <select name="size" id="size">
+                <option value="1">Fine</option>
+                <option value="2">Diminutive</option>
+                <option value="2">Tiny</option>
+                <option value="3">Small</option>
+                <option value="4" selected>Medium</option>
+                <option value="5">Large</option>
+                <option value="6">Huge</option>
+                <option value="7">Gargantuan</option>
+                <option value="8">Colossal</option>
+            </select>
+        </div>
     </div>
 
     <div class="form-group">
         <label for="lantern">Equip Lantern?</label>
         <div class="form-fields">
             <input type="checkbox" name="lantern" id="lantern"/>
-            <p class="notes">Adds 30ft bright-light source.</p>
         </div>
+        <div class="notes">Adds 30ft bright-light source.</div>
     </div>
+
+    <button type="submit" id="save"><i class="fas fa-user-plus"></i>Create Token</button>
 </div>
