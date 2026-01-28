@@ -6,17 +6,10 @@ export class CTHMacros {
     static async tokenizeAllActors(options: { deleteActors?: boolean; moveToCompendium?: boolean } = {}) {
         // Foundry VTT v13 + PF1 macro: tokenizeAllActors (non-player actors)
         //
-        // What it does:
-        // - Places tokens for every non-player actor on the current scene
-        //   - Token is unlinked (actorLink=false)
-        //   - Token is detached (no actorId, no actorData snapshot)
-        // - Optionally moves those actors into a compendium (with folder matching/creation)
-        // - Optionally deletes the original actors (after compendium move)
-        //
         // Config
-        const DELETE_ACTORS = options.deleteActors ?? false; // default false
-        const MOVE_TO_COMPENDIUM = options.moveToCompendium ?? true; // default true
-        const COMPENDIUM_KEY = 'world.heavy-rain-actors'; // default pack id
+        const DELETE_ACTORS = false; // default false
+        const MOVE_TO_COMPENDIUM = false; // default false
+        const COMPENDIUM_KEY = 'world.heavy-rain-actors'; // used only if MOVE_TO_COMPENDIUM=true
 
         if (!canvas?.scene) return ui.notifications.error('No active scene.');
 
@@ -24,9 +17,13 @@ export class CTHMacros {
         const gridSizePx = canvas.grid.size;
 
         // Spacing rules (in grid units)
-        const BASE_GAP = 1; // normal gap between tokens
-        const LETTER_GAP = 2; // extra gap between first-letter groups
-        const SIZE_ROW_GAP = 4; // gap between size rows
+        const GAP_BETWEEN_TOKENS = 0; // no gap between adjacent tokens
+        const GAP_BETWEEN_LETTERS = 3; // gap between letter groups within a size group
+        const GAP_BETWEEN_ROWS_SAME_SIZE = 3; // gap between wrapped rows within same size group
+        const GAP_BETWEEN_SIZE_GROUPS = 6; // gap between size groups (each size starts a new block)
+
+        // Token name display setting
+        const DISPLAY_NAME_MODE = 30;
 
         // Helpers
         const normFolderPath = (folder) => {
@@ -53,7 +50,7 @@ export class CTHMacros {
                 parent = existing ?? (await Folder.create({ name: part, type, folder: parent?.id ?? null }));
             }
 
-            return parent; // deepest folder
+            return parent;
         };
 
         const getPack = () => {
@@ -63,7 +60,15 @@ export class CTHMacros {
             return pack;
         };
 
-        // Collect non-player actors
+        const clampFloorToGrid = (px) => Math.max(0, Math.floor(px / gridSizePx));
+
+        // 1) Clear existing tokens in the scene
+        const existingTokenIds = scene.tokens?.map((t) => t.id) ?? [];
+        if (existingTokenIds.length) {
+            await scene.deleteEmbeddedDocuments('Token', existingTokenIds);
+        }
+
+        // 2) Collect non-player actors
         const entries = game.actors
             .filter((a) => a && !a.hasPlayerOwner)
             .map((a) => {
@@ -74,7 +79,7 @@ export class CTHMacros {
                 return { actor: a, pt, w, h, sizeKey, name: (a.name ?? '').trim() };
             });
 
-        // Sort: size asc, then alphabetically
+        // Sort: size asc, then name alpha (case-insensitive)
         entries.sort((A, B) => A.sizeKey - B.sizeKey || A.name.localeCompare(B.name, undefined, { sensitivity: 'base' }));
 
         // Group by sizeKey
@@ -84,34 +89,53 @@ export class CTHMacros {
             bySize.get(e.sizeKey).push(e);
         }
 
-        // Scene bounds in grid units (best-effort)
-        const sceneWidthPx = scene.dimensions?.sceneWidth ?? scene.width ?? 0;
-        const maxGX = sceneWidthPx ? Math.floor(sceneWidthPx / gridSizePx) : Number.POSITIVE_INFINITY;
+        if (!entries.length) return ui.notifications.warn('No non-player actors found.');
 
-        // Build tokens
+        // 3) Compute padded placement bounds (in grid units)
+        const dims = scene.dimensions;
+        const padFrac = Number(scene.padding ?? 0);
+        const leftPadPx = (dims?.sceneWidth ?? scene.width ?? 0) * padFrac;
+        const topPadPx = (dims?.sceneHeight ?? scene.height ?? 0) * padFrac;
+
+        const startGX = clampFloorToGrid(leftPadPx);
+        const startGY = clampFloorToGrid(topPadPx);
+
+        const innerWidthPx = (dims?.sceneWidth ?? scene.width ?? 0) * (1 - 2 * padFrac);
+        const innerHeightPx = (dims?.sceneHeight ?? scene.height ?? 0) * (1 - 2 * padFrac);
+
+        const maxGX = Number.isFinite(innerWidthPx) ? Math.max(1, Math.floor(innerWidthPx / gridSizePx)) : Number.POSITIVE_INFINITY;
+        const maxGY = Number.isFinite(innerHeightPx) ? Math.max(1, Math.floor(innerHeightPx / gridSizePx)) : Number.POSITIVE_INFINITY;
+
+        // 4) Build tokens within padded bounds
         const tokenDatas = [];
-        let curGY = 0;
+        let curGX = startGX;
+        let curGY = startGY;
+
+        const wrapLimitGX = startGX + maxGX; // exclusive limit in grid units
 
         for (const [sizeKey, list] of [...bySize.entries()].sort((a, b) => a[0] - b[0])) {
-            let curGX = 0;
-            let groupRowMaxH = 0;
-
+            curGX = startGX;
+            let rowMaxH = 0;
             let lastLetter = null;
 
             for (const { actor, pt, w, h, name } of list) {
                 const firstLetter = (name[0] ?? '').toUpperCase();
-                if (lastLetter !== null && firstLetter !== lastLetter) curGX += LETTER_GAP;
+
+                if (lastLetter !== null && firstLetter !== lastLetter) curGX += GAP_BETWEEN_LETTERS;
                 lastLetter = firstLetter;
 
-                // Wrap within the size row if needed (best-effort)
-                if (Number.isFinite(maxGX) && curGX + w > maxGX) {
-                    curGX = 0;
-                    curGY += groupRowMaxH + BASE_GAP;
-                    groupRowMaxH = 0;
+                // Wrap within the current size group block (respect padded right edge)
+                if (Number.isFinite(wrapLimitGX) && curGX + w > wrapLimitGX) {
+                    curGX = startGX;
+                    curGY += rowMaxH + GAP_BETWEEN_ROWS_SAME_SIZE;
+                    rowMaxH = 0;
                     lastLetter = null;
                 }
 
-                groupRowMaxH = Math.max(groupRowMaxH, h);
+                rowMaxH = Math.max(rowMaxH, h);
+
+                // Stop if we exceed padded bottom edge (best-effort guard)
+                if (Number.isFinite(maxGY) && curGY - startGY + rowMaxH > maxGY) break;
 
                 const td = foundry.utils.deepClone(pt);
 
@@ -120,56 +144,58 @@ export class CTHMacros {
                 td.actorId = null;
                 delete td.actorData;
 
+                // Force name display mode
+                td.displayName = DISPLAY_NAME_MODE;
+
+                // Position (grid-aligned, within padding bounds)
                 td.x = curGX * gridSizePx;
                 td.y = curGY * gridSizePx;
 
+                // Ensure size + name
                 td.width = w;
                 td.height = h;
-
                 td.name = name || td.name || actor.name || 'Token';
 
                 tokenDatas.push(td);
 
-                curGX += w + BASE_GAP;
+                // Advance cursor with NO base gap
+                curGX += w + GAP_BETWEEN_TOKENS;
             }
 
-            // Next size group starts on a new row with 4-grid gap
-            curGY += groupRowMaxH + SIZE_ROW_GAP;
+            // Next size group starts on a new row block (respect padded bounds)
+            curGY += rowMaxH + GAP_BETWEEN_SIZE_GROUPS;
         }
 
-        if (!tokenDatas.length) return ui.notifications.warn('No non-player actors found.');
+        if (!tokenDatas.length) return ui.notifications.warn('No tokens to create within padded bounds.');
 
-        // Create tokens now (so tokenization is independent of later compendium/delete actions)
         await scene.createEmbeddedDocuments('Token', tokenDatas);
 
-        // Optional: move to compendium (with folder mirroring)
+        // 5) Optional: move to compendium (with folder mirroring)
         if (MOVE_TO_COMPENDIUM) {
             const pack = getPack();
-            await pack.getIndex(); // warm index
+            await pack.getIndex();
 
-            const createdIds = [];
+            let copied = 0;
+
             for (const { actor } of entries) {
-                // Mirror the actor's folder path into the compendium folder tree
                 const srcFolder = actor.folder ?? null;
                 const folderPath = srcFolder ? normFolderPath(srcFolder) : '';
                 const targetFolder = folderPath ? await ensureFolderPath('Actor', folderPath) : null;
 
-                // Export Actor data, strip world-only ids, then import into pack
                 const data = actor.toObject();
                 delete data._id;
                 delete data.id;
 
                 if (targetFolder) data.folder = targetFolder.id;
 
-                // If a doc with same name already exists in pack, you may end up with duplicates (intentional).
-                const created = await Actor.create(data, { pack: pack.collection });
-                createdIds.push(created.id);
+                await Actor.create(data, { pack: pack.collection });
+                copied += 1;
             }
 
-            ui.notifications.info(`Copied ${createdIds.length} actor(s) to compendium ${COMPENDIUM_KEY}.`);
+            ui.notifications.info(`Copied ${copied} actor(s) to compendium ${COMPENDIUM_KEY}.`);
         }
 
-        // Optional: delete originals (after compendium copy)
+        // 6) Optional: delete originals (after compendium copy, if enabled)
         if (DELETE_ACTORS) {
             const actorIds = entries.map((e) => e.actor.id);
             await Actor.deleteDocuments(actorIds);
@@ -177,7 +203,7 @@ export class CTHMacros {
         }
 
         ui.notifications.info(
-            `Tokenized ${tokenDatas.length} actor(s)` +
+            `Cleared ${existingTokenIds.length} token(s); tokenized ${tokenDatas.length} actor(s)` +
                 `${MOVE_TO_COMPENDIUM ? `; copied to ${COMPENDIUM_KEY}` : ''}` +
                 `${DELETE_ACTORS ? '; deleted originals' : ''}.`,
         );
