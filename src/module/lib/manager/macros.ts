@@ -3,209 +3,272 @@ export class CTHMacros {
         new game.cth.apps.ApplicationNewToken().render({ force: true });
     }
 
-    static async tokenizeAllActors(compendium = undefined, moveToCompendium = false, deleteOriginals = false) {
-        // Foundry VTT v13 + PF1 macro: tokenizeAllActors (non-player actors)
-        //
+    static async tokenizeAllActors(compendium = undefined, moveToCompendium = true, deleteOriginals = false) {
+        // -----------------------------
         // Config
-        const DELETE_ACTORS = deleteOriginals ?? false; // default false
-        const MOVE_TO_COMPENDIUM = moveToCompendium ?? false; // default false
-        const COMPENDIUM_KEY = compendium ?? 'world.heavy-rain-actors'; // used only if MOVE_TO_COMPENDIUM=true
+        // -----------------------------
+        const packId = compendium ?? 'world.heavy-rain-actors';
+        const storeToCompendium = moveToCompendium ?? true;
+        const deleteActors = deleteOriginals ?? false;
 
-        if (!canvas?.scene) return ui.notifications.error('No active scene.');
-
-        const scene = canvas.scene;
-        const gridSizePx = canvas.grid.size;
-
-        // Spacing rules (in grid units)
-        const GAP_BETWEEN_TOKENS = 0; // no gap between adjacent tokens
-        const GAP_BETWEEN_LETTERS = 3; // gap between letter groups within a size group
-        const GAP_BETWEEN_ROWS_SAME_SIZE = 3; // gap between wrapped rows within same size group
-        const GAP_BETWEEN_SIZE_GROUPS = 6; // gap between size groups (each size starts a new block)
-
-        // Token name display setting
         const DISPLAY_NAME_MODE = 30;
 
+        const EXTRA_PADDING_TILES = 2;
+
+        const LETTER_GAP_TILES = 3;
+        const ROW_GAP_TILES = 3;
+        const SIZE_GROUP_GAP_TILES = 4;
+
+        // -----------------------------
+        // Preconditions
+        // -----------------------------
+        const scene = canvas?.scene;
+        if (!scene) return ui.notifications.error('No active scene on canvas.');
+        if (!canvas?.grid?.size) return ui.notifications.error('Canvas grid not ready.');
+        const gridPx = canvas.grid.size;
+
+        const actors = game.actors
+            .filter(a => a && !a.hasPlayerOwner)
+            .filter(a => !a.compendium);
+
+        if (!actors.length) return ui.notifications.info('No non-player-owned actors found.');
+
+        // -----------------------------
         // Helpers
-        const normFolderPath = (folder) => {
-            const names = [];
-            let f = folder;
-            while (f) {
-                names.unshift((f.name ?? '').trim());
-                f = f.parent;
-            }
-            return names.filter(Boolean).join('/');
-        };
-
-        const ensureFolderPath = async (type, path) => {
-            if (!path) return null;
-
-            const parts = String(path)
-                .split('/')
-                .map((p) => p.trim())
-                .filter(Boolean);
-            let parent = null;
-
-            for (const part of parts) {
-                const existing = game.folders?.find((f) => f.type === type && f.name === part && (parent ? f.folder?.id === parent.id : !f.folder));
-                parent = existing ?? (await Folder.create({ name: part, type, folder: parent?.id ?? null }));
-            }
-
-            return parent;
-        };
-
-        const getPack = () => {
-            const pack = game.packs.get(COMPENDIUM_KEY);
-            if (!pack) throw new Error(`Compendium not found: ${COMPENDIUM_KEY}`);
-            if (pack.documentName !== 'Actor') throw new Error(`Compendium ${COMPENDIUM_KEY} is not an Actor pack.`);
-            return pack;
-        };
-
-        const clampFloorToGrid = (px) => Math.max(0, Math.floor(px / gridSizePx));
-
-        // 1) Clear existing tokens in the scene
-        const existingTokenIds = scene.tokens?.map((t) => t.id) ?? [];
-        if (existingTokenIds.length) {
-            await scene.deleteEmbeddedDocuments('Token', existingTokenIds);
+        // -----------------------------
+        function firstLetterKey(name) {
+            const s = String(name ?? '').trim();
+            if (!s) return '#';
+            const c = s[0].toUpperCase();
+            return (c >= 'A' && c <= 'Z') ? c : '#';
         }
 
-        // 2) Collect non-player actors
-        const entries = game.actors
-            .filter((a) => a && !a.hasPlayerOwner)
-            .map((a) => {
-                const pt = a.prototypeToken?.toObject?.() ?? {};
-                const w = Number(pt.width ?? 1);
-                const h = Number(pt.height ?? 1);
-                const sizeKey = Math.max(w, h);
-                return { actor: a, pt, w, h, sizeKey, name: (a.name ?? '').trim() };
+        function groupKeyFromDims(wTiles, hTiles) {
+            const m = Math.max(Number(wTiles || 1), Number(hTiles || 1));
+            return m >= 5 ? 5 : Math.max(1, Math.floor(m));
+        }
+
+        async function getSizedTokenSource(actor) {
+            if (typeof actor.getTokenDocument === 'function') {
+                const td = await actor.getTokenDocument();
+                return td?.toObject ? td.toObject() : td;
+            }
+            return actor.prototypeToken.toObject();
+        }
+
+        // -----------------------------
+        // Build enriched list with effective token dims (PF1-applied)
+        // -----------------------------
+        const enriched = [];
+        for (const actor of actors) {
+            const tokenSrc = await getSizedTokenSource(actor);
+            const wTiles = Number(tokenSrc?.width ?? 1);
+            const hTiles = Number(tokenSrc?.height ?? 1);
+
+            enriched.push({
+                actor,
+                name: actor.name ?? '',
+                letter: firstLetterKey(actor.name),
+                wTiles,
+                hTiles,
+                sizeKey: groupKeyFromDims(wTiles, hTiles),
+                tokenSrc
             });
-
-        // Sort: size asc, then name alpha (case-insensitive)
-        entries.sort((A, B) => A.sizeKey - B.sizeKey || A.name.localeCompare(B.name, undefined, { sensitivity: 'base' }));
-
-        // Group by sizeKey
-        const bySize = new Map();
-        for (const e of entries) {
-            if (!bySize.has(e.sizeKey)) bySize.set(e.sizeKey, []);
-            bySize.get(e.sizeKey).push(e);
         }
 
-        if (!entries.length) return ui.notifications.warn('No non-player actors found.');
+        const sizeKeys = Array.from(new Set(enriched.map(e => e.sizeKey))).sort((a, b) => a - b);
+        const groupsBySize = new Map(sizeKeys.map(k => [k, []]));
+        for (const e of enriched) groupsBySize.get(e.sizeKey).push(e);
 
-        // 3) Compute padded placement bounds (in grid units)
-        const dims = scene.dimensions;
-        const padFrac = Number(scene.padding ?? 0);
-        const leftPadPx = (dims?.sceneWidth ?? scene.width ?? 0) * padFrac;
-        const topPadPx = (dims?.sceneHeight ?? scene.height ?? 0) * padFrac;
+        for (const arr of groupsBySize.values()) {
+            arr.sort((a, b) => {
+                const an = a.name.toLowerCase();
+                const bn = b.name.toLowerCase();
+                if (an < bn) return -1;
+                if (an > bn) return 1;
+                return a.actor.id.localeCompare(b.actor.id);
+            });
+        }
 
-        const startGX = clampFloorToGrid(leftPadPx);
-        const startGY = clampFloorToGrid(topPadPx);
+        // -----------------------------
+        // Placement bounds
+        // -----------------------------
+        const pad = Number(scene.padding ?? 0);
+        const minX = Math.round(scene.width * pad + EXTRA_PADDING_TILES * gridPx);
+        const minY = Math.round(scene.height * pad + EXTRA_PADDING_TILES * gridPx);
+        const maxX = Math.round(scene.width * (1 - pad) - EXTRA_PADDING_TILES * gridPx);
+        const maxY = Math.round(scene.height * (1 - pad) - EXTRA_PADDING_TILES * gridPx);
 
-        const innerWidthPx = (dims?.sceneWidth ?? scene.width ?? 0) * (1 - 2 * padFrac);
-        const innerHeightPx = (dims?.sceneHeight ?? scene.height ?? 0) * (1 - 2 * padFrac);
+        if (minX >= maxX || minY >= maxY) {
+            return ui.notifications.error('Scene padding + extra padding leaves no usable placement area.');
+        }
 
-        const maxGX = Number.isFinite(innerWidthPx) ? Math.max(1, Math.floor(innerWidthPx / gridSizePx)) : Number.POSITIVE_INFINITY;
-        const maxGY = Number.isFinite(innerHeightPx) ? Math.max(1, Math.floor(innerHeightPx / gridSizePx)) : Number.POSITIVE_INFINITY;
+        // -----------------------------
+        // Layout tokens
+        // -----------------------------
+        const tokenCreates = [];
+        let yCursorPx = minY;
 
-        // 4) Build tokens within padded bounds
-        const tokenDatas = [];
-        let curGX = startGX;
-        let curGY = startGY;
+        for (const sizeKeyVal of sizeKeys) {
+            const group = groupsBySize.get(sizeKeyVal) ?? [];
+            if (!group.length) continue;
 
-        const wrapLimitGX = startGX + maxGX; // exclusive limit in grid units
+            let xCursorPx = minX;
+            let rowMaxHTiles = 0;
+            let prevLetter = null;
 
-        for (const [sizeKey, list] of [...bySize.entries()].sort((a, b) => a[0] - b[0])) {
-            curGX = startGX;
-            let rowMaxH = 0;
-            let lastLetter = null;
+            const flushRowAndAdvance = () => {
+                yCursorPx += (rowMaxHTiles * gridPx) + (ROW_GAP_TILES * gridPx);
+                xCursorPx = minX;
+                rowMaxHTiles = 0;
+                prevLetter = null;
+            };
 
-            for (const { actor, pt, w, h, name } of list) {
-                const firstLetter = (name[0] ?? '').toUpperCase();
+            for (const item of group) {
+                const wPx = item.wTiles * gridPx;
+                const hPx = item.hTiles * gridPx;
 
-                if (lastLetter !== null && firstLetter !== lastLetter) curGX += GAP_BETWEEN_LETTERS;
-                lastLetter = firstLetter;
-
-                // Wrap within the current size group block (respect padded right edge)
-                if (Number.isFinite(wrapLimitGX) && curGX + w > wrapLimitGX) {
-                    curGX = startGX;
-                    curGY += rowMaxH + GAP_BETWEEN_ROWS_SAME_SIZE;
-                    rowMaxH = 0;
-                    lastLetter = null;
+                if (xCursorPx !== minX && prevLetter !== null && item.letter !== prevLetter) {
+                    xCursorPx += LETTER_GAP_TILES * gridPx;
                 }
 
-                rowMaxH = Math.max(rowMaxH, h);
+                if (xCursorPx + wPx > maxX) {
+                    flushRowAndAdvance();
+                    if (minX + wPx > maxX) {
+                        return ui.notifications.error(
+                            `Token "${item.name}" (${item.wTiles}x${item.hTiles}) cannot fit within padded scene bounds.`
+                        );
+                    }
+                }
 
-                // Stop if we exceed padded bottom edge (best-effort guard)
-                if (Number.isFinite(maxGY) && curGY - startGY + rowMaxH > maxGY) break;
+                if (yCursorPx + hPx > maxY) {
+                    return ui.notifications.error(
+                        `Ran out of vertical space while placing tokens (stopped at "${item.name}"). Consider a larger scene.`
+                    );
+                }
 
-                const td = foundry.utils.deepClone(pt);
-
-                // Detach token from actor entirely
+                const td = foundry.utils.deepClone(item.tokenSrc);
+                td.x = xCursorPx;
+                td.y = yCursorPx;
+                td.actorId = item.actor.id;
                 td.actorLink = false;
-                td.actorId = null;
-                delete td.actorData;
-
-                // Force name display mode
+                td.delta = {};
                 td.displayName = DISPLAY_NAME_MODE;
 
-                // Position (grid-aligned, within padding bounds)
-                td.x = curGX * gridSizePx;
-                td.y = curGY * gridSizePx;
+                tokenCreates.push(td);
 
-                // Ensure size + name
-                td.width = w;
-                td.height = h;
-                td.name = name || td.name || actor.name || 'Token';
-
-                tokenDatas.push(td);
-
-                // Advance cursor with NO base gap
-                curGX += w + GAP_BETWEEN_TOKENS;
+                xCursorPx += wPx;
+                rowMaxHTiles = Math.max(rowMaxHTiles, item.hTiles);
+                prevLetter = item.letter;
             }
 
-            // Next size group starts on a new row block (respect padded bounds)
-            curGY += rowMaxH + GAP_BETWEEN_SIZE_GROUPS;
+            yCursorPx += (rowMaxHTiles * gridPx);
+            yCursorPx += SIZE_GROUP_GAP_TILES * gridPx;
         }
 
-        if (!tokenDatas.length) return ui.notifications.warn('No tokens to create within padded bounds.');
+        // -----------------------------
+        // 1) Place all tokens first
+        // -----------------------------
+        await scene.createEmbeddedDocuments('Token', tokenCreates);
 
-        await scene.createEmbeddedDocuments('Token', tokenDatas);
+        // -----------------------------
+        // 2) Compendium work (nested folders)
+        // -----------------------------
+        let pack = null;
+        if (storeToCompendium) {
+            pack = game.packs.get(packId);
+            if (!pack) return ui.notifications.error(`Compendium pack not found: ${packId}`);
+            if (pack.documentName !== 'Actor') return ui.notifications.error(`Compendium ${packId} is not an Actor compendium.`);
+            if (pack.locked) return ui.notifications.error(`Compendium ${packId} is locked.`);
+        }
 
-        // 5) Optional: move to compendium (with folder mirroring)
-        if (MOVE_TO_COMPENDIUM) {
-            const pack = getPack();
-            await pack.getIndex();
+        // Cache keyed by (parentId, name) -> folderId
+        const folderCache = new Map();
+        const ck = (parentId, name) => `${parentId ?? 'root'}::${name}`;
 
-            let copied = 0;
+        // IMPORTANT: seed cache from existing compendium folders
+        // NOTE: Compendium folders live on the pack (pack.folders), not reliably in game.folders.
+        const existingPackFolders = pack?.folders?.contents ?? [];
+        for (const f of existingPackFolders) {
+            if (f.type !== 'Actor') continue;
 
-            for (const { actor } of entries) {
-                const srcFolder = actor.folder ?? null;
-                const folderPath = srcFolder ? normFolderPath(srcFolder) : '';
-                const targetFolder = folderPath ? await ensureFolderPath('Actor', folderPath) : null;
+            const parentId =
+                (typeof f.folder === 'string' ? f.folder : (f.folder?.id ?? null)) ??
+                (f.parent?.id ?? null) ??
+                null;
 
-                const data = actor.toObject();
-                delete data._id;
-                delete data.id;
+            folderCache.set(ck(parentId, f.name), f.id);
+        }
 
-                if (targetFolder) data.folder = targetFolder.id;
+        async function ensureCompendiumFolderChain(actorFolder) {
+            if (!actorFolder) return null;
 
-                await Actor.create(data, { pack: pack.collection });
-                copied += 1;
+            // Build chain root->leaf from WORLD folders (walk by parent id, not cur.parent)
+            const chain = [];
+            let cur = actorFolder;
+            while (cur) {
+                chain.push(cur);
+
+                const parentId =
+                    (typeof cur.folder === 'string' ? cur.folder : (cur.folder?.id ?? null)) ??
+                    null;
+
+                cur = parentId ? game.folders.get(parentId) : null;
+            }
+            chain.reverse();
+
+            let parentId = null;
+
+            for (const src of chain) {
+                const key = ck(parentId, src.name);
+                let folderId = folderCache.get(key);
+
+                if (!folderId) {
+                    const created = await Folder.createDocuments(
+                        [{
+                            name: src.name,
+                            type: 'Actor',
+                            folder: parentId,
+                            pack: pack.collection,
+                            sorting: src.sorting ?? 'a',
+                            sort: src.sort ?? 0,
+                            color: src.color ?? null
+                        }],
+                        { pack: pack.collection, render: false }
+                    );
+
+                    const newFolder = created?.[0];
+                    if (!newFolder?.id) throw new Error(`Failed to create compendium folder "${src.name}".`);
+
+                    folderId = newFolder.id;
+                    folderCache.set(key, folderId);
+                }
+
+                parentId = folderId;
             }
 
-            ui.notifications.info(`Copied ${copied} actor(s) to compendium ${COMPENDIUM_KEY}.`);
+            return parentId;
         }
 
-        // 6) Optional: delete originals (after compendium copy, if enabled)
-        if (DELETE_ACTORS) {
-            const actorIds = entries.map((e) => e.actor.id);
-            await Actor.deleteDocuments(actorIds);
-            ui.notifications.info(`Deleted ${actorIds.length} actor(s) from the world.`);
+        for (const a of actors) {
+            const folderId = await ensureCompendiumFolderChain(a.folder);
+
+            const data = a.toObject();
+            data.folder = folderId;
+            console.log('Adding actor to compendium:', data.id, data.name)
+            await pack.documentClass.create(data, { pack: pack.collection });
         }
 
+        // -----------------------------
+        // 3) Optionally delete actors
+        // -----------------------------
+        if (deleteActors) {
+            await Actor.deleteDocuments(actors.map(a => a.id));
+        }
+        console.log('Done.');
         ui.notifications.info(
-            `Cleared ${existingTokenIds.length} token(s); tokenized ${tokenDatas.length} actor(s)` +
-                `${MOVE_TO_COMPENDIUM ? `; copied to ${COMPENDIUM_KEY}` : ''}` +
-                `${DELETE_ACTORS ? '; deleted originals' : ''}.`,
+            `Done: placed ${tokenCreates.length} tokens, copied ${actors.length} actors to ${packId}` +
+            (deleteActors ? `, deleted ${actors.length} actors` : '')
         );
     }
 }
