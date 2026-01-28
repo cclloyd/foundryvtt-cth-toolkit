@@ -3,13 +3,13 @@ export class CTHMacros {
         new game.cth.apps.ApplicationNewToken().render({ force: true });
     }
 
-    static async tokenizeAllActors(options: { deleteActors?: boolean; moveToCompendium?: boolean } = {}) {
+    static async tokenizeAllActors(compendium = undefined, moveToCompendium = false, deleteOriginals = false) {
         // Foundry VTT v13 + PF1 macro: tokenizeAllActors (non-player actors)
         //
         // Config
-        const DELETE_ACTORS = false; // default false
-        const MOVE_TO_COMPENDIUM = false; // default false
-        const COMPENDIUM_KEY = 'world.heavy-rain-actors'; // used only if MOVE_TO_COMPENDIUM=true
+        const DELETE_ACTORS = moveToCompendium ?? false; // default false
+        const MOVE_TO_COMPENDIUM = deleteOriginals ?? false; // default false
+        const COMPENDIUM_KEY = compendium ?? 'world.heavy-rain-actors'; // used only if MOVE_TO_COMPENDIUM=true
 
         if (!canvas?.scene) return ui.notifications.error('No active scene.');
 
